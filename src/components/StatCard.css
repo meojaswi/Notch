@@ -1,0 +1,76 @@
+.stat-card {
+  border-radius: 20px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 64px;
+}
+
+.stat-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--notch-text-secondary);
+}
+
+.stat-card-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.stat-card-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--notch-text-primary);
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-card-body {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+}
+
+.stat-card-bar-track {
+  width: 100%;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.stat-card-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--notch-accent-green);
+}
+
+.stat-card-net {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--notch-accent-blue);
+}
+
+.stat-card-net-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-card-next {
+  font-size: 11px;
+  color: var(--notch-text-secondary);
+}

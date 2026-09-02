@@ -1,0 +1,19 @@
+:root {
+  --notch-text-primary: #f2f3f5;
+  --notch-text-secondary: rgba(242, 243, 245, 0.6);
+  --notch-text-tertiary: rgba(242, 243, 245, 0.4);
+  --notch-accent-green: #3ecf8e;
+  --notch-accent-blue: #6fb8ff;
+  --notch-accent-red: #ff5c5c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: transparent;
+  font-family: -apple-system, 'Segoe UI', Inter, system-ui, sans-serif;
+  color: var(--notch-text-primary);
+}

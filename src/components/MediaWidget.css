@@ -1,0 +1,102 @@
+.media-widget {
+  border-radius: 20px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.media-widget--empty {
+  align-items: center;
+  justify-content: center;
+  color: var(--notch-text-tertiary);
+  font-size: 12px;
+  min-height: 96px;
+}
+
+.media-widget-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.media-widget-art {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  background: linear-gradient(150deg, var(--notch-accent-red), #7a2a3a);
+  background-size: cover;
+  background-position: center;
+}
+
+.media-widget-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.media-widget-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--notch-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.media-widget-artist {
+  font-size: 11px;
+  color: var(--notch-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.media-widget-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.media-widget-btn {
+  border: none;
+  background: transparent;
+  color: var(--notch-text-secondary);
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.media-widget-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--notch-text-primary);
+}
+
+.media-widget-progress-track {
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.media-widget-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--notch-text-primary);
+}
+
+.media-widget-times {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--notch-text-tertiary);
+}

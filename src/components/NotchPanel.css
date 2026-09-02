@@ -1,0 +1,11 @@
+.notch-panel {
+  width: 420px;
+  border-radius: 26px;
+  background: linear-gradient(180deg, rgba(18, 20, 24, 0.92), rgba(10, 11, 14, 0.96));
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+  padding-top: 4px;
+  /* -webkit-app-region: drag; enable in Electron so the panel is grabbable;
+     set -webkit-app-region: no-drag on individual buttons */
+}
