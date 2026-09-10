@@ -62,19 +62,7 @@
   object-fit: cover;
 }
 
-.media-app-icon.playing {
-  animation: appIconPulse 1.4s ease-in-out infinite;
-}
 
-@keyframes appIconPulse {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.04);
-  }
-}
 
 .media-info {
   display: flex;
