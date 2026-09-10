@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import "./MediaIsland.css";
 
 function formatTime(ms) {
@@ -18,34 +18,6 @@ export default function MediaIsland({
   onPointerLeave,
 }) {
   const islandRef = useRef(null);
-
-  useEffect(() => {
-    const island = islandRef.current;
-    if (!island || !window.notchAPI?.resize) return undefined;
-
-    let timeoutId;
-    const observer = new ResizeObserver(() => {
-      const { width, height } = island.getBoundingClientRect();
-      const rootBounds = document.documentElement.getBoundingClientRect();
-      const requiredWidth = Math.max(
-        island.getBoundingClientRect().right,
-        rootBounds.width - island.getBoundingClientRect().left,
-      );
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => {
-        window.notchAPI.resize({
-          width: Math.ceil(Math.max(width, requiredWidth)),
-          height: Math.ceil(height),
-        });
-      }, 75);
-    });
-
-    observer.observe(island);
-    return () => {
-      clearTimeout(timeoutId);
-      observer.disconnect();
-    };
-  }, [media?.title, media?.artist, media?.thumbnail, media?.status]);
 
   if (!media || !media.title) return null;
 

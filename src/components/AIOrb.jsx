@@ -81,7 +81,10 @@ export default function AIOrb({
         window.notchAPI?.setInteractive(true);
         onPointerEnter?.(e);
       }}
-      onPointerLeave={onPointerLeave}
+      onPointerLeave={(e) => {
+        if (dragging.current) return;
+        onPointerLeave?.(e);
+      }}
     >
       <div className={`orb-core ${state}`} />
     </div>
