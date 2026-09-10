@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import AIOrb from "./components/AIOrb";
 import AIResult from "./components/AIResult";
-import SearchPrompt from "./components/SearchPrompt";
 import MediaIsland from "./components/MediaIsland";
+
+const COPY_DISCOVERY_MS = 5000;
+const RESULT_RETIRE_MS = 1500;
 
 export default function App() {
   const [state, setState] = useState("idle");
@@ -17,6 +19,25 @@ export default function App() {
   const hoverTimeoutRef = useRef(null);
   const copyTimeoutRef = useRef(null);
 
+  const expireCopiedContent = () => {
+    setCopiedQuery(null);
+    setClipboardKind(null);
+    setAiResult(null);
+    setAiLoading(false);
+    setIsSearchOpen(false);
+    setState("idle");
+  };
+
+  const scheduleCopyExpiry = () => {
+    clearTimeout(copyTimeoutRef.current);
+    copyTimeoutRef.current = setTimeout(expireCopiedContent, COPY_DISCOVERY_MS);
+  };
+
+  const scheduleResultExpiry = () => {
+    clearTimeout(copyTimeoutRef.current);
+    copyTimeoutRef.current = setTimeout(expireCopiedContent, RESULT_RETIRE_MS);
+  };
+
   // Listen for dock direction (expands right or left depending on screen edge)
   useEffect(() => {
     if (!window.notchAPI?.onDockDirection) return;
@@ -30,28 +51,22 @@ export default function App() {
   useEffect(() => {
     if (!window.notchAPI?.onClipboardCopy) return;
 
-    const cleanup = window.notchAPI.onClipboardCopy(({ kind = "text", text }) => {
-      const isValidText = kind === "text" && text && text.trim();
-      const isImage = kind === "image";
+    const cleanup = window.notchAPI.onClipboardCopy(
+      ({ kind = "text", text }) => {
+        const isValidText = kind === "text" && text && text.trim();
+        const isImage = kind === "image";
 
-      if (isValidText || isImage) {
-        clearTimeout(copyTimeoutRef.current);
-        setCopiedQuery(isValidText ? text.trim() : null);
-        setClipboardKind(kind);
-        setAiResult(null);
-        setAiLoading(true);
-        setIsSearchOpen(false);
-        setState("copied");
-        copyTimeoutRef.current = setTimeout(() => {
-          setCopiedQuery(null);
-          setClipboardKind(null);
+        if (isValidText || isImage) {
+          setCopiedQuery(isValidText ? text.trim() : null);
+          setClipboardKind(kind);
           setAiResult(null);
-          setAiLoading(false);
+          setAiLoading(true);
           setIsSearchOpen(false);
-          setState("idle");
-        }, 9000);
-      }
-    });
+          setState("copied");
+          scheduleCopyExpiry();
+        }
+      },
+    );
 
     return () => {
       cleanup?.();
@@ -92,6 +107,7 @@ export default function App() {
     }
     setIsHovered(true);
     if (copiedQuery || clipboardKind === "image") {
+      clearTimeout(copyTimeoutRef.current);
       setIsSearchOpen(true);
       setState("thinking");
     }
@@ -103,17 +119,32 @@ export default function App() {
     }, 450);
   };
 
+  const handleResultPointerEnter = () => {
+    clearTimeout(copyTimeoutRef.current);
+    window.notchAPI?.setInteractive(true);
+  };
+
+  const handleResultInteraction = () => {
+    clearTimeout(copyTimeoutRef.current);
+  };
+
+  const handleResultPointerLeave = () => {
+    if (copiedQuery || clipboardKind === "image") {
+      scheduleResultExpiry();
+    }
+  };
+
   // Reveal the search prompt from a recent copy only after the orb is hovered.
   const hasPendingClipboard = Boolean(copiedQuery || clipboardKind === "image");
   const showMedia = Boolean(
-    !hasPendingClipboard && media && media.active && isHovered
+    !hasPendingClipboard && media && media.active && isHovered,
   );
   const isExpanded = Boolean(isSearchOpen || showMedia);
 
   // Dynamically manage window dimensions based on expansion state
   useEffect(() => {
     if (isExpanded) {
-      window.notchAPI?.setWindowSize({ width: 450, height: 100 });
+      window.notchAPI?.setWindowSize({ width: 620, height: 220 });
     } else {
       window.notchAPI?.setWindowSize({ width: 100, height: 100 });
     }
@@ -149,21 +180,24 @@ export default function App() {
         />
       </div>
 
-      {isSearchOpen && clipboardKind === "image" ? (
+      {isSearchOpen && (clipboardKind === "image" || copiedQuery) ? (
         <AIResult
           loading={aiLoading}
+          kind={clipboardKind}
+          micro={aiResult?.micro}
+          short={aiResult?.short}
+          full={aiResult?.full}
           description={aiResult?.description}
           detectedText={aiResult?.detectedText}
           query={aiResult?.query}
           error={aiResult?.error}
-          onSearch={() => handleSearch(aiResult?.query)}
+          fallbackText={copiedQuery}
+          onSearch={() => handleSearch(aiResult?.query || copiedQuery)}
           onDismiss={dismissPrompt}
-        />
-      ) : isSearchOpen && copiedQuery ? (
-        <SearchPrompt
-          text={aiResult?.query || copiedQuery}
-          onSearch={() => handleSearch(copiedQuery)}
-          onDismiss={dismissPrompt}
+          onPointerEnter={handleResultPointerEnter}
+          onPointerLeave={handleResultPointerLeave}
+          onPointerMove={handleResultInteraction}
+          onWheel={handleResultInteraction}
         />
       ) : showMedia ? (
         <MediaIsland

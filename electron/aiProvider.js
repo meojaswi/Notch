@@ -43,25 +43,42 @@ async function generate(contents) {
   return parseJsonResponse(response.text || "{}");
 }
 
-export async function createSearchQuery(text) {
+function normalizeAnalysis(result) {
+  return {
+    micro: typeof result?.micro === "string" ? result.micro.trim() : "",
+    short: typeof result?.short === "string" ? result.short.trim() : "",
+    full: typeof result?.full === "string" ? result.full.trim() : "",
+    query: typeof result?.query === "string" ? result.query.trim() : "",
+    detectedText:
+      typeof result?.detectedText === "string"
+        ? result.detectedText.trim()
+        : "",
+  };
+}
+
+export async function analyzeText(text) {
   const result = await generate(`
-Create one concise web search query from the copied text below.
+Analyze this copied text and respond ONLY in this JSON shape, with no markdown:
+{
+  "micro": "max 6 words, glanceable label",
+  "short": "max 15 words, one-line summary for the island",
+  "full": "2-4 sentences, detailed description",
+  "query": "one concise web search query"
+}
+
 Preserve important names, technologies, error messages, and intent.
-Return JSON only in this exact shape: {"query":"..."}
 
 Copied text:
 ${text}
 `);
 
-  return typeof result?.query === "string" && result.query.trim()
-    ? result.query.trim()
-    : null;
+  return normalizeAnalysis(result);
 }
 
-export async function describeImage(imageData, mimeType = "image/png") {
+export async function analyzeImage(imageData, mimeType = "image/png") {
   const result = await generate([
     {
-      text: 'Describe this image and suggest one useful web search query. Return JSON only in this exact shape: {"description":"...","query":"...","detectedText":"..."}. Use an empty string when no text is visible.',
+      text: 'Analyze this image and respond ONLY in this JSON shape, with no markdown: {"micro":"max 6 words, glanceable label","short":"max 15 words, one-line summary for the island","full":"2-4 sentences, detailed description","query":"one useful web search query","detectedText":"visible text, or empty string"}.',
     },
     {
       inlineData: {
@@ -71,13 +88,5 @@ export async function describeImage(imageData, mimeType = "image/png") {
     },
   ]);
 
-  return {
-    description:
-      typeof result?.description === "string" ? result.description.trim() : "",
-    query: typeof result?.query === "string" ? result.query.trim() : "",
-    detectedText:
-      typeof result?.detectedText === "string"
-        ? result.detectedText.trim()
-        : "",
-  };
+  return normalizeAnalysis(result);
 }

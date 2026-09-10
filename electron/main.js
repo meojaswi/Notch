@@ -12,7 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createWindow } from "./window.js";
 import { applyPosition } from "./position.js";
-import { createSearchQuery, describeImage } from "./aiProvider.js";
+import { analyzeImage, analyzeText } from "./aiProvider.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const electronDataPath = path.join(__dirname, "../.electron-data");
@@ -26,6 +26,27 @@ let clipboardInterval = null;
 let mediaProcess = null;
 
 function readClipboardSnapshot() {
+  const formats = clipboard.availableFormats("clipboard");
+  const hasImage = formats.some((format) =>
+    format.toLowerCase().startsWith("image/"),
+  );
+
+  if (hasImage) {
+    const image = clipboard.readImage("clipboard");
+    if (!image.isEmpty()) {
+      const size = image.getSize();
+      const resizedImage =
+        size.width > 1280 ? image.resize({ width: 1280 }) : image;
+      const imageData = resizedImage.toPNG();
+
+      return {
+        kind: "image",
+        imageData: imageData.toString("base64"),
+        signature: `image:${createHash("sha1").update(imageData).digest("hex")}`,
+      };
+    }
+  }
+
   const text = clipboard.readText() || "";
   const trimmed = text.trim();
 
@@ -37,7 +58,7 @@ function readClipboardSnapshot() {
     };
   }
 
-  const image = clipboard.readImage();
+  const image = clipboard.readImage("clipboard");
   if (image.isEmpty()) return null;
 
   const size = image.getSize();
@@ -56,8 +77,8 @@ async function processClipboardWithAi(win, snapshot) {
   try {
     const result =
       snapshot.kind === "text"
-        ? { query: await createSearchQuery(snapshot.text) }
-        : await describeImage(snapshot.imageData);
+        ? await analyzeText(snapshot.text)
+        : await analyzeImage(snapshot.imageData);
 
     if (win && !win.isDestroyed()) {
       win.webContents.send("notch:ai-result", {
@@ -99,7 +120,7 @@ function startClipboardWatcher(win) {
 
       if (
         snapshot.kind === "image" ||
-        (snapshot.text.length >= 2 && snapshot.text.length <= 1200)
+        (snapshot.text.length >= 1 && snapshot.text.length <= 1200)
       ) {
         win.webContents.send("notch:clipboard-copy", {
           kind: snapshot.kind,

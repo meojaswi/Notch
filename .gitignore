@@ -181,5 +181,5 @@ spec/fixtures/logo.png
 
 .yarn/install-state.gz
 
-
+.env.example
 WEBGL_STUDY_GUIDE.md

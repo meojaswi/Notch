@@ -2,39 +2,51 @@ import "./AIResult.css";
 
 export default function AIResult({
   loading,
-  description,
+  kind,
+  micro,
+  short,
+  full,
   detectedText,
   query,
   error,
+  fallbackText,
   onSearch,
   onDismiss,
+  onPointerEnter,
+  onPointerLeave,
+  onPointerMove,
+  onWheel,
 }) {
   return (
     <div
       className="ai-result-wrap"
-      onPointerEnter={() => window.notchAPI?.setInteractive(true)}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
+      onPointerMove={onPointerMove}
+      onWheel={onWheel}
     >
       <div className="ai-result-icon" aria-hidden="true">
-        {loading ? "..." : "AI"}
+        {loading ? "..." : kind === "image" ? "IMG" : "TXT"}
       </div>
 
       <div className="ai-result-content">
         <span className="ai-result-label">
           {loading
-            ? "Analyzing image"
-            : error
-              ? "Image analysis"
-              : "Image description"}
+            ? "Analyzing"
+            : micro || (kind === "image" ? "Image" : "Copied text")}
         </span>
-        <span className="ai-result-description">
+        <span className="ai-result-summary">
           {loading
-            ? "Gemini is describing the copied image..."
-            : description || error || "Image description unavailable"}
+            ? "Gemini is preparing a brief description..."
+            : short || error || fallbackText}
         </span>
-        {!loading && detectedText ? (
-          <span className="ai-result-text" title={detectedText}>
-            Text: {detectedText}
-          </span>
+        {!loading ? (
+          <div className="ai-result-details">
+            <p>{full || error || "Description unavailable"}</p>
+            {detectedText ? (
+              <p className="ai-result-text">Text: {detectedText}</p>
+            ) : null}
+          </div>
         ) : null}
       </div>
 
