@@ -70,7 +70,7 @@ export default function App() {
   // Dynamically manage window dimensions based on expansion state
   useEffect(() => {
     if (isExpanded) {
-      window.notchAPI?.setWindowSize({ width: 400, height: 100 });
+      window.notchAPI?.setWindowSize({ width: 450, height: 100 });
     } else {
       window.notchAPI?.setWindowSize({ width: 100, height: 100 });
     }

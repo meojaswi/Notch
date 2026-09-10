@@ -9,6 +9,11 @@ function formatTime(ms) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
+function truncate(str, max = 22) {
+  if (!str) return "";
+  return str.length > max ? `${str.slice(0, max).trim()}…` : str;
+}
+
 export default function MediaIsland({
   media,
   onPlayPause,
@@ -53,11 +58,11 @@ export default function MediaIsland({
 
         <div className="media-info">
           <span className="media-title" title={media.title}>
-            {media.title}
+            {truncate(media.title, 22)}
           </span>
           {media.artist && (
             <span className="media-artist" title={media.artist}>
-              {media.artist}
+              {truncate(media.artist, 26)}
             </span>
           )}
         </div>
