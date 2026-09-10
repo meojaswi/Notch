@@ -117,6 +117,9 @@ export default function App() {
     hoverTimeoutRef.current = setTimeout(() => {
       setIsHovered(false);
     }, 450);
+    if (!copiedQuery && clipboardKind !== "image" && !isSearchOpen) {
+      window.notchAPI?.setInteractive(false);
+    }
   };
 
   const handleResultPointerEnter = () => {
@@ -132,6 +135,7 @@ export default function App() {
     if (copiedQuery || clipboardKind === "image") {
       scheduleResultExpiry();
     }
+    window.notchAPI?.setInteractive(false);
   };
 
   // Reveal the search prompt from a recent copy only after the orb is hovered.

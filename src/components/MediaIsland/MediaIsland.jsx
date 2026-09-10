@@ -40,7 +40,10 @@ export default function MediaIsland({
         window.notchAPI?.setInteractive(true);
         onPointerEnter?.(e);
       }}
-      onPointerLeave={onPointerLeave}
+      onPointerLeave={(e) => {
+        window.notchAPI?.setInteractive(false);
+        onPointerLeave?.(e);
+      }}
     >
       <div className="media-top-row">
         <div
