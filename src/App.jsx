@@ -6,10 +6,12 @@ import MediaIsland from "./components/MediaIsland";
 export default function App() {
   const [state, setState] = useState("idle");
   const [copiedQuery, setCopiedQuery] = useState(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [media, setMedia] = useState(null);
   const [isHovered, setIsHovered] = useState(false);
   const [dockDirection, setDockDirection] = useState("left");
   const hoverTimeoutRef = useRef(null);
+  const copyTimeoutRef = useRef(null);
 
   // Listen for dock direction (expands right or left depending on screen edge)
   useEffect(() => {
@@ -26,12 +28,22 @@ export default function App() {
 
     const cleanup = window.notchAPI.onClipboardCopy(({ text }) => {
       if (text && text.trim()) {
+        clearTimeout(copyTimeoutRef.current);
         setCopiedQuery(text.trim());
-        setState("thinking");
+        setIsSearchOpen(false);
+        setState("copied");
+        copyTimeoutRef.current = setTimeout(() => {
+          setCopiedQuery(null);
+          setIsSearchOpen(false);
+          setState("idle");
+        }, 9000);
       }
     });
 
-    return cleanup;
+    return () => {
+      cleanup?.();
+      clearTimeout(copyTimeoutRef.current);
+    };
   }, []);
 
   // Listen for Windows GSMTC media events (Spotify, YouTube, Chrome, Apple Music, etc.)
@@ -55,6 +67,10 @@ export default function App() {
       hoverTimeoutRef.current = null;
     }
     setIsHovered(true);
+    if (copiedQuery) {
+      setIsSearchOpen(true);
+      setState("thinking");
+    }
   };
 
   const handlePointerLeave = () => {
@@ -63,9 +79,9 @@ export default function App() {
     }, 450);
   };
 
-  // Reveal media only when hovered; clipboard prompt reveals immediately
+  // Reveal the search prompt from a recent copy only after the orb is hovered.
   const showMedia = Boolean(!copiedQuery && media && media.active && isHovered);
-  const isExpanded = Boolean(copiedQuery || showMedia);
+  const isExpanded = Boolean(isSearchOpen || showMedia);
 
   // Dynamically manage window dimensions based on expansion state
   useEffect(() => {
@@ -82,7 +98,9 @@ export default function App() {
   };
 
   const dismissPrompt = () => {
+    clearTimeout(copyTimeoutRef.current);
     setCopiedQuery(null);
+    setIsSearchOpen(false);
     setState("idle");
   };
 
@@ -101,7 +119,7 @@ export default function App() {
         />
       </div>
 
-      {copiedQuery ? (
+      {isSearchOpen && copiedQuery ? (
         <SearchPrompt
           text={copiedQuery}
           onSearch={() => handleSearch(copiedQuery)}

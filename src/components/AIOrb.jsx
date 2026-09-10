@@ -65,6 +65,7 @@ export default function AIOrb({
     <div
       role="button"
       tabIndex={0}
+      aria-label={state === "copied" ? "Copied to clipboard" : "AI Orb"}
       className={`orb-wrap ${isDragging ? "dragging" : ""}`}
       style={{
         "--size": typeof size === "number" ? `${size}px` : size,

@@ -22,19 +22,31 @@
 .orb-core {
   width: 100%;
   height: 100%;
+  position: relative;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #2b2b2b 0%, #0a0a0a 60%, #000 100%);
-  box-shadow: 0 0 16px rgba(255, 255, 255, 0.08), inset 0 0 12px rgba(0, 0, 0, 0.9);
-  transition: box-shadow 0.4s ease, transform 0.4s ease;
+  background: radial-gradient(
+    circle at 35% 30%,
+    #2b2b2b 0%,
+    #0a0a0a 60%,
+    #000 100%
+  );
+  box-shadow:
+    0 0 16px rgba(255, 255, 255, 0.08),
+    inset 0 0 12px rgba(0, 0, 0, 0.9);
+  transition:
+    box-shadow 0.4s ease,
+    transform 0.4s ease;
 }
 
 .orb-core.hover,
-.orb-wrap:hover .orb-core:not(.listening):not(.speaking):not(.thinking):not(.error) {
+.orb-wrap:hover
+  .orb-core:not(.listening):not(.speaking):not(.thinking):not(.error) {
   animation: hoverPulse 1.6s ease-in-out infinite;
 }
 
 @keyframes hoverPulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
   }
   50% {
@@ -44,11 +56,14 @@
 
 .orb-core.listening {
   animation: glowPulse 1.2s ease-in-out infinite;
-  box-shadow: 0 0 calc(16px + var(--amp, 0.3) * 30px) rgba(255, 255, 255, 0.25), inset 0 0 12px rgba(0, 0, 0, 0.9);
+  box-shadow:
+    0 0 calc(16px + var(--amp, 0.3) * 30px) rgba(255, 255, 255, 0.25),
+    inset 0 0 12px rgba(0, 0, 0, 0.9);
 }
 
 @keyframes glowPulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
   }
   50% {
@@ -61,11 +76,16 @@
 }
 
 @keyframes speakPulse {
-  0%, 100% {
-    box-shadow: 0 0 16px rgba(255, 255, 255, 0.1), inset 0 0 12px rgba(0, 0, 0, 0.9);
+  0%,
+  100% {
+    box-shadow:
+      0 0 16px rgba(255, 255, 255, 0.1),
+      inset 0 0 12px rgba(0, 0, 0, 0.9);
   }
   50% {
-    box-shadow: 0 0 26px rgba(255, 255, 255, 0.3), inset 0 0 12px rgba(0, 0, 0, 0.9);
+    box-shadow:
+      0 0 26px rgba(255, 255, 255, 0.3),
+      inset 0 0 12px rgba(0, 0, 0, 0.9);
   }
 }
 
@@ -74,17 +94,64 @@
 }
 
 @keyframes thinkShimmer {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
-    box-shadow: 0 0 14px rgba(255, 255, 255, 0.07), inset 0 0 12px rgba(0, 0, 0, 0.9);
+    box-shadow:
+      0 0 14px rgba(255, 255, 255, 0.07),
+      inset 0 0 12px rgba(0, 0, 0, 0.9);
   }
   50% {
     opacity: 0.85;
-    box-shadow: 0 0 20px rgba(255, 255, 255, 0.18), inset 0 0 12px rgba(0, 0, 0, 0.9);
+    box-shadow:
+      0 0 20px rgba(255, 255, 255, 0.18),
+      inset 0 0 12px rgba(0, 0, 0, 0.9);
   }
 }
 
 .orb-core.error {
-  background: radial-gradient(circle at 35% 30%, #4a1010 0%, #1a0303 60%, #000 100%);
-  box-shadow: 0 0 18px rgba(255, 60, 60, 0.45), inset 0 0 12px rgba(0, 0, 0, 0.9);
+  background: radial-gradient(
+    circle at 35% 30%,
+    #4a1010 0%,
+    #1a0303 60%,
+    #000 100%
+  );
+  box-shadow:
+    0 0 18px rgba(255, 60, 60, 0.45),
+    inset 0 0 12px rgba(0, 0, 0, 0.9);
+}
+
+.orb-core.copied {
+  background: radial-gradient(
+    circle at 35% 30%,
+    #28402f 0%,
+    #101c14 60%,
+    #000 100%
+  );
+  box-shadow:
+    0 0 18px rgba(100, 220, 135, 0.4),
+    inset 0 0 12px rgba(0, 0, 0, 0.9);
+}
+
+.orb-core.copied::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border: 1px solid rgba(167, 243, 184, 0.75);
+  border-radius: 50%;
+  opacity: 0;
+  animation: copiedPulseRing 1.8s ease-out 1 forwards;
+  pointer-events: none;
+}
+
+@keyframes copiedPulseRing {
+  0% {
+    opacity: 0.85;
+    transform: scale(0.92);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.22);
+  }
 }
