@@ -40,7 +40,7 @@ function Get-MediaData {
                 $dotnetStream = $asStreamMethod.Invoke($null, @($thumbnailStream))
                 $memoryStream = [System.IO.MemoryStream]::new()
                 $dotnetStream.CopyTo($memoryStream)
-                $contentType = [Windows.Storage.Streams.IRandomAccessStreamWithContentType].GetProperty("ContentType").GetValue($thumbnailStream)
+                $contentType = $thumbnailStream.ContentType
                 $thumbnailBytes = $memoryStream.ToArray()
                 $thumbnail = "data:$contentType;base64,$([Convert]::ToBase64String($thumbnailBytes))"
                 $memoryStream.Dispose()

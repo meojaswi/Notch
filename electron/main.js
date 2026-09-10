@@ -1,4 +1,11 @@
-import { app, BrowserWindow, clipboard, ipcMain, screen, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  ipcMain,
+  screen,
+  shell,
+} from "electron";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

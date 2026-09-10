@@ -26,10 +26,15 @@ export default function MediaIsland({
     let timeoutId;
     const observer = new ResizeObserver(() => {
       const { width, height } = island.getBoundingClientRect();
+      const rootBounds = document.documentElement.getBoundingClientRect();
+      const requiredWidth = Math.max(
+        island.getBoundingClientRect().right,
+        rootBounds.width - island.getBoundingClientRect().left,
+      );
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
         window.notchAPI.resize({
-          width: Math.ceil(width),
+          width: Math.ceil(Math.max(width, requiredWidth)),
           height: Math.ceil(height),
         });
       }, 75);
