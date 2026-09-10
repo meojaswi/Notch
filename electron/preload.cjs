@@ -11,6 +11,11 @@ contextBridge.exposeInMainWorld("notchAPI", {
     ipcRenderer.on("notch:clipboard-copy", handler);
     return () => ipcRenderer.removeListener("notch:clipboard-copy", handler);
   },
+  onAiResult: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on("notch:ai-result", handler);
+    return () => ipcRenderer.removeListener("notch:ai-result", handler);
+  },
   onMediaUpdate: (callback) => {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on("notch:media-update", handler);

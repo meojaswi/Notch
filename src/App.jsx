@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import AIOrb from "./components/AIOrb";
+import AIResult from "./components/AIResult";
 import SearchPrompt from "./components/SearchPrompt";
 import MediaIsland from "./components/MediaIsland";
 
 export default function App() {
   const [state, setState] = useState("idle");
   const [copiedQuery, setCopiedQuery] = useState(null);
+  const [clipboardKind, setClipboardKind] = useState(null);
+  const [aiResult, setAiResult] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [media, setMedia] = useState(null);
   const [isHovered, setIsHovered] = useState(false);
@@ -26,14 +30,23 @@ export default function App() {
   useEffect(() => {
     if (!window.notchAPI?.onClipboardCopy) return;
 
-    const cleanup = window.notchAPI.onClipboardCopy(({ text }) => {
-      if (text && text.trim()) {
+    const cleanup = window.notchAPI.onClipboardCopy(({ kind = "text", text }) => {
+      const isValidText = kind === "text" && text && text.trim();
+      const isImage = kind === "image";
+
+      if (isValidText || isImage) {
         clearTimeout(copyTimeoutRef.current);
-        setCopiedQuery(text.trim());
+        setCopiedQuery(isValidText ? text.trim() : null);
+        setClipboardKind(kind);
+        setAiResult(null);
+        setAiLoading(true);
         setIsSearchOpen(false);
         setState("copied");
         copyTimeoutRef.current = setTimeout(() => {
           setCopiedQuery(null);
+          setClipboardKind(null);
+          setAiResult(null);
+          setAiLoading(false);
           setIsSearchOpen(false);
           setState("idle");
         }, 9000);
@@ -44,6 +57,17 @@ export default function App() {
       cleanup?.();
       clearTimeout(copyTimeoutRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    if (!window.notchAPI?.onAiResult) return;
+
+    const cleanup = window.notchAPI.onAiResult((result) => {
+      setAiResult(result);
+      setAiLoading(false);
+    });
+
+    return cleanup;
   }, []);
 
   // Listen for Windows GSMTC media events (Spotify, YouTube, Chrome, Apple Music, etc.)
@@ -67,7 +91,7 @@ export default function App() {
       hoverTimeoutRef.current = null;
     }
     setIsHovered(true);
-    if (copiedQuery) {
+    if (copiedQuery || clipboardKind === "image") {
       setIsSearchOpen(true);
       setState("thinking");
     }
@@ -80,7 +104,10 @@ export default function App() {
   };
 
   // Reveal the search prompt from a recent copy only after the orb is hovered.
-  const showMedia = Boolean(!copiedQuery && media && media.active && isHovered);
+  const hasPendingClipboard = Boolean(copiedQuery || clipboardKind === "image");
+  const showMedia = Boolean(
+    !hasPendingClipboard && media && media.active && isHovered
+  );
   const isExpanded = Boolean(isSearchOpen || showMedia);
 
   // Dynamically manage window dimensions based on expansion state
@@ -100,6 +127,9 @@ export default function App() {
   const dismissPrompt = () => {
     clearTimeout(copyTimeoutRef.current);
     setCopiedQuery(null);
+    setClipboardKind(null);
+    setAiResult(null);
+    setAiLoading(false);
     setIsSearchOpen(false);
     setState("idle");
   };
@@ -119,9 +149,19 @@ export default function App() {
         />
       </div>
 
-      {isSearchOpen && copiedQuery ? (
+      {isSearchOpen && clipboardKind === "image" ? (
+        <AIResult
+          loading={aiLoading}
+          description={aiResult?.description}
+          detectedText={aiResult?.detectedText}
+          query={aiResult?.query}
+          error={aiResult?.error}
+          onSearch={() => handleSearch(aiResult?.query)}
+          onDismiss={dismissPrompt}
+        />
+      ) : isSearchOpen && copiedQuery ? (
         <SearchPrompt
-          text={copiedQuery}
+          text={aiResult?.query || copiedQuery}
           onSearch={() => handleSearch(copiedQuery)}
           onDismiss={dismissPrompt}
         />

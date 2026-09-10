@@ -7,10 +7,12 @@ import {
   shell,
 } from "electron";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createWindow } from "./window.js";
 import { applyPosition } from "./position.js";
+import { createSearchQuery, describeImage } from "./aiProvider.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const electronDataPath = path.join(__dirname, "../.electron-data");
@@ -19,9 +21,61 @@ app.setPath("cache", path.join(electronDataPath, "Cache"));
 app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
 
 let mainWindow;
-let lastClipboardText = "";
+let lastClipboardSignature = "";
 let clipboardInterval = null;
 let mediaProcess = null;
+
+function readClipboardSnapshot() {
+  const text = clipboard.readText() || "";
+  const trimmed = text.trim();
+
+  if (trimmed) {
+    return {
+      kind: "text",
+      text: trimmed,
+      signature: `text:${trimmed}`,
+    };
+  }
+
+  const image = clipboard.readImage();
+  if (image.isEmpty()) return null;
+
+  const size = image.getSize();
+  const resizedImage =
+    size.width > 1280 ? image.resize({ width: 1280 }) : image;
+  const imageData = resizedImage.toPNG();
+
+  return {
+    kind: "image",
+    imageData: imageData.toString("base64"),
+    signature: `image:${createHash("sha1").update(imageData).digest("hex")}`,
+  };
+}
+
+async function processClipboardWithAi(win, snapshot) {
+  try {
+    const result =
+      snapshot.kind === "text"
+        ? { query: await createSearchQuery(snapshot.text) }
+        : await describeImage(snapshot.imageData);
+
+    if (win && !win.isDestroyed()) {
+      win.webContents.send("notch:ai-result", {
+        kind: snapshot.kind,
+        ...(!result ? { error: "Gemini is not configured" } : {}),
+        ...result,
+      });
+    }
+  } catch (err) {
+    console.error("Gemini clipboard processing error:", err);
+    if (win && !win.isDestroyed()) {
+      win.webContents.send("notch:ai-result", {
+        kind: snapshot.kind,
+        error: "AI processing failed",
+      });
+    }
+  }
+}
 
 function startClipboardWatcher(win) {
   if (clipboardInterval) {
@@ -29,24 +83,29 @@ function startClipboardWatcher(win) {
   }
 
   try {
-    lastClipboardText = clipboard.readText() || "";
+    lastClipboardSignature = readClipboardSnapshot()?.signature || "";
   } catch {
-    lastClipboardText = "";
+    lastClipboardSignature = "";
   }
 
   clipboardInterval = setInterval(() => {
     if (!win || win.isDestroyed()) return;
 
     try {
-      const currentText = clipboard.readText() || "";
-      const trimmed = currentText.trim();
+      const snapshot = readClipboardSnapshot();
+      if (!snapshot || snapshot.signature === lastClipboardSignature) return;
 
-      if (trimmed && trimmed !== lastClipboardText) {
-        lastClipboardText = trimmed;
+      lastClipboardSignature = snapshot.signature;
 
-        if (trimmed.length >= 2 && trimmed.length <= 1200) {
-          win.webContents.send("notch:clipboard-copy", { text: trimmed });
-        }
+      if (
+        snapshot.kind === "image" ||
+        (snapshot.text.length >= 2 && snapshot.text.length <= 1200)
+      ) {
+        win.webContents.send("notch:clipboard-copy", {
+          kind: snapshot.kind,
+          ...(snapshot.kind === "text" ? { text: snapshot.text } : {}),
+        });
+        processClipboardWithAi(win, snapshot);
       }
     } catch (err) {
       console.error("Clipboard watch error:", err);

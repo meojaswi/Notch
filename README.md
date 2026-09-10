@@ -11,6 +11,21 @@ npm run build
 npm run dist
 ```
 
+## Gemini setup
+
+Notch uses the official `@google/genai` SDK from the Electron main process. Set
+the API key before starting the app:
+
+```powershell
+$env:GEMINI_API_KEY="your-api-key"
+npm run start
+```
+
+`GEMINI_MODEL` optionally selects the Gemini model and defaults to
+`gemini-2.5-flash`. Copied text is converted into a search query, while copied
+images are described and can produce a search query. Clipboard content is sent
+to Gemini only when `GEMINI_API_KEY` is configured.
+
 ## Architecture
 
 - Electron main process creates and manages windows.
