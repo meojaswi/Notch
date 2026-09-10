@@ -48,7 +48,7 @@ function Get-MediaData {
                 $thumbnailStream.Dispose()
             }
         } catch {
-            [Console]::Error.WriteLine("Thumbnail extraction failed: $($_.Exception.Message)")
+            # Thumbnail unavailable for this source — skip silently
         }
 
         $timeline = $currentSession.GetTimelineProperties()
