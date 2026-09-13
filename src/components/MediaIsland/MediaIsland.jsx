@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./MediaIsland.css";
 
 function formatTime(ms) {
@@ -16,6 +16,7 @@ function truncate(str, max = 22) {
 
 export default function MediaIsland({
   media,
+  visible = true,
   onPlayPause,
   onNext,
   onPrev,
@@ -23,19 +24,38 @@ export default function MediaIsland({
   onPointerLeave,
 }) {
   const islandRef = useRef(null);
+  const [localPosition, setLocalPosition] = useState(media?.position || 0);
+
+  const isPlaying = media?.status === "Playing";
+
+  useEffect(() => {
+    setLocalPosition(media?.position || 0);
+  }, [media?.position, media?.title]);
+
+  useEffect(() => {
+    if (!isPlaying) return undefined;
+
+    const timer = setInterval(() => {
+      setLocalPosition((position) => {
+        const duration = media?.duration || Number.POSITIVE_INFINITY;
+        return Math.min(duration, position + 250);
+      });
+    }, 250);
+
+    return () => clearInterval(timer);
+  }, [isPlaying, media?.duration]);
 
   if (!media || !media.title) return null;
 
-  const isPlaying = media.status === "Playing";
   const progress =
     media.duration > 0
-      ? Math.min(100, Math.max(0, (media.position / media.duration) * 100))
+      ? Math.min(100, Math.max(0, (localPosition / media.duration) * 100))
       : 0;
 
   return (
     <div
       ref={islandRef}
-      className="media-island-wrap"
+      className={`media-island-wrap${visible ? "" : " media-island-hidden"}`}
       onPointerEnter={(e) => {
         window.notchAPI?.setInteractive(true);
         onPointerEnter?.(e);
@@ -122,7 +142,7 @@ export default function MediaIsland({
       </div>
 
       <div className="media-progress-row">
-        <span className="media-time">{formatTime(media.position)}</span>
+        <span className="media-time">{formatTime(localPosition)}</span>
         <div className="media-progress" aria-hidden="true">
           <span style={{ width: `${progress}%` }} />
         </div>

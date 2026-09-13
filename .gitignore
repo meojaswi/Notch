@@ -183,3 +183,5 @@ spec/fixtures/logo.png
 
 .env.example
 WEBGL_STUDY_GUIDE.md
+
+whispers.cpp/

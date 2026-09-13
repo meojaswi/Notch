@@ -22,6 +22,11 @@
   cursor: default;
 }
 
+.media-island-hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 @keyframes mediaSlideIn {
   from {
     opacity: 0;

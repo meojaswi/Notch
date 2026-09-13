@@ -203,9 +203,10 @@ export default function App() {
           onPointerMove={handleResultInteraction}
           onWheel={handleResultInteraction}
         />
-      ) : showMedia ? (
+      ) : media && media.active ? (
         <MediaIsland
           media={media}
+          visible={showMedia}
           onPlayPause={() => window.notchAPI?.mediaControl("toggle")}
           onNext={() => window.notchAPI?.mediaControl("next")}
           onPrev={() => window.notchAPI?.mediaControl("prev")}
