@@ -61,6 +61,11 @@ export default function AIOrb({
     onClick?.(event);
   };
 
+  // States that render expanding sonar rings around the core.
+  const showRings = state === "listening" || state === "speaking";
+  // "copied" gets a single one-shot ring instead of a looping set.
+  const showCopiedRing = state === "copied";
+
   return (
     <div
       role="button"
@@ -87,7 +92,28 @@ export default function AIOrb({
         onPointerLeave?.(e);
       }}
     >
-      <div className={`orb-core ${state}`} />
+      {/* ambient particles drifting around the orb */}
+      <span className="particle" />
+      <span className="particle" />
+      <span className="particle" />
+      <span className="particle" />
+      <span className="particle" />
+
+      <div className={`orb-core ${state}`}>
+        <div className="plasma" />
+        <div className="glass" />
+        <div className="vignette" />
+
+        {showRings && (
+          <>
+            <div className="ring" />
+            <div className="ring" />
+            <div className="ring" />
+          </>
+        )}
+
+        {showCopiedRing && <div className="ring ring-copied" />}
+      </div>
     </div>
   );
 }
