@@ -4,6 +4,7 @@ import {
   clipboard,
   ipcMain,
   screen,
+  session,
   shell,
 } from "electron";
 import { spawn } from "node:child_process";
@@ -12,7 +13,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createWindow } from "./window.js";
 import { applyPosition } from "./position.js";
-import { analyzeImage, analyzeText } from "./aiProvider.js";
+import { analyzeAudio, analyzeImage, analyzeText } from "./aiProvider.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const electronDataPath = path.join(__dirname, "../.electron-data");
@@ -272,9 +273,26 @@ ipcMain.on("notch:media-control", (_event, action) => {
   sendMediaKey(action);
 });
 
+ipcMain.handle("notch:voice-command", async (_event, { audioData, mimeType }) => {
+  try {
+    const result = await analyzeAudio(audioData, mimeType);
+    return result || { error: "Gemini is not configured" };
+  } catch (err) {
+    console.error("Gemini voice processing error:", err);
+    return { error: err.message || "Voice processing failed" };
+  }
+});
+
 ipcMain.handle("notch:ping", () => "pong");
 
 app.whenReady().then(() => {
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    return permission === "media";
+  });
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(permission === "media");
+  });
+
   createMainWindow();
 
   app.on("activate", () => {

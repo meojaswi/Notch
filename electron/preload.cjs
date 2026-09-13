@@ -27,5 +27,7 @@ contextBridge.exposeInMainWorld("notchAPI", {
     return () => ipcRenderer.removeListener("notch:dock-direction", handler);
   },
   mediaControl: (action) => ipcRenderer.send("notch:media-control", action),
+  sendVoiceAudio: (audioData, mimeType) =>
+    ipcRenderer.invoke("notch:voice-command", { audioData, mimeType }),
   ping: () => ipcRenderer.invoke("notch:ping"),
 });

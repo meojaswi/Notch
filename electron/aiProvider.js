@@ -90,3 +90,43 @@ export async function analyzeImage(imageData, mimeType = "image/png") {
 
   return normalizeAnalysis(result);
 }
+
+export async function analyzeAudio(audioData, mimeType = "audio/webm") {
+  const result = await generate([
+    {
+      text: `You are a voice assistant for a Windows desktop utility widget.
+Listen carefully to the spoken voice in this audio clip.
+Transcribe what the user said and detect the command.
+
+Respond ONLY in this JSON shape with no markdown:
+{
+  "transcript": "Exact transcription of spoken words",
+  "action": "play" | "pause" | "toggle" | "next" | "prev" | "search" | "unknown",
+  "query": "search query string if action is search, otherwise empty string"
+}
+
+Command recognition rules:
+- "play", "resume", "start music", "unpause" -> "play"
+- "pause", "stop", "stop music" -> "pause"
+- "toggle", "play pause" -> "toggle"
+- "next", "skip", "next song", "next track" -> "next"
+- "previous", "prev", "go back", "last track" -> "prev"
+- "search for [x]", "google [x]", "find [x]", "look up [x]" -> "search", query: "[x]"
+- If the user asks a question or names a topic without media keywords (e.g. "what is quantum computing", "cats"), set action "search", query to that text.
+- If completely unintelligible or silent, set action "unknown" and transcript ""`,
+    },
+    {
+      inlineData: {
+        mimeType,
+        data: audioData,
+      },
+    },
+  ]);
+
+  return {
+    transcript: typeof result?.transcript === "string" ? result.transcript.trim() : "",
+    action: typeof result?.action === "string" ? result.action.trim() : "unknown",
+    query: typeof result?.query === "string" ? result.query.trim() : "",
+  };
+}
+

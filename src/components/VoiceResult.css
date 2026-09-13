@@ -1,0 +1,226 @@
+.voice-result-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 8px;
+  width: 600px;
+  min-height: 176px;
+  max-height: 200px;
+  box-sizing: border-box;
+  padding: 8px 12px 8px 14px;
+  background: rgba(18, 18, 24, 0.88);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 24px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.55),
+    0 0 12px rgba(100, 160, 255, 0.12);
+  animation: voiceSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  user-select: none;
+}
+
+@keyframes voiceSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+/* ---- Mic icon ---- */
+.voice-mic-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: rgba(255, 80, 80, 0.18);
+  color: #ff6b6b;
+  transition: background 0.3s, color 0.3s;
+}
+
+.voice-mic-icon.listening {
+  background: rgba(255, 80, 80, 0.3);
+  animation: micPulse 1.2s ease-in-out infinite;
+}
+
+.voice-mic-icon.analyzing {
+  background: rgba(100, 160, 255, 0.25);
+  color: #8cb4ff;
+  animation: micPulseBlue 1.2s ease-in-out infinite;
+}
+
+.voice-mic-icon.done {
+  background: rgba(80, 220, 140, 0.18);
+  color: #50dc8c;
+}
+
+@keyframes micPulseBlue {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(100, 160, 255, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(100, 160, 255, 0);
+  }
+}
+
+.voice-mic-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+@keyframes micPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 80, 80, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(255, 80, 80, 0);
+  }
+}
+
+/* ---- Content area ---- */
+.voice-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  align-self: stretch;
+  justify-content: center;
+  gap: 6px;
+}
+
+.voice-status {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.voice-transcript {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  min-height: 20px;
+}
+
+.voice-transcript.interim {
+  color: rgba(255, 255, 255, 0.5);
+  font-style: italic;
+}
+
+/* Blinking cursor while listening */
+.voice-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.6);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: cursorBlink 0.8s step-end infinite;
+}
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ---- Command feedback ---- */
+.voice-command-feedback {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: rgba(80, 220, 140, 0.12);
+  border: 1px solid rgba(80, 220, 140, 0.2);
+  width: fit-content;
+}
+
+.voice-command-feedback .command-icon {
+  font-size: 14px;
+}
+
+.voice-command-feedback .command-text {
+  color: #50dc8c;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ---- Waveform bars ---- */
+.voice-waveform {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 24px;
+  margin-top: 4px;
+}
+
+.voice-waveform .bar {
+  width: 3px;
+  border-radius: 2px;
+  background: linear-gradient(to top, #6a7bff, #ff6bc6);
+  animation: waveBar 0.6s ease-in-out infinite alternate;
+}
+
+.bar:nth-child(1) { height: 8px; animation-delay: 0s; }
+.bar:nth-child(2) { height: 16px; animation-delay: 0.1s; }
+.bar:nth-child(3) { height: 10px; animation-delay: 0.2s; }
+.bar:nth-child(4) { height: 20px; animation-delay: 0.3s; }
+.bar:nth-child(5) { height: 12px; animation-delay: 0.15s; }
+.bar:nth-child(6) { height: 18px; animation-delay: 0.25s; }
+.bar:nth-child(7) { height: 8px; animation-delay: 0.35s; }
+
+@keyframes waveBar {
+  0% { transform: scaleY(0.4); }
+  100% { transform: scaleY(1); }
+}
+
+/* ---- Dismiss button ---- */
+.voice-dismiss-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 14px;
+  cursor: default;
+  flex-shrink: 0;
+}
+
+.voice-dismiss-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* ---- Hints ---- */
+.voice-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.voice-hint {
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 10px;
+  font-weight: 500;
+}

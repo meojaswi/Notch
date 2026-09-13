@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import AIOrb from "./components/AIOrb";
 import AIResult from "./components/AIResult";
 import MediaIsland from "./components/MediaIsland";
+import VoiceResult from "./components/VoiceResult";
+import useVoiceCommand from "./hooks/useVoiceCommand";
 
 const COPY_DISCOVERY_MS = 5000;
 const RESULT_RETIRE_MS = 1500;
+const VOICE_DISMISS_MS = 3000;
 
 export default function App() {
   const [state, setState] = useState("idle");
@@ -16,8 +19,11 @@ export default function App() {
   const [media, setMedia] = useState(null);
   const [isHovered, setIsHovered] = useState(false);
   const [dockDirection, setDockDirection] = useState("left");
+  const [voiceActive, setVoiceActive] = useState(false);
+
   const hoverTimeoutRef = useRef(null);
   const copyTimeoutRef = useRef(null);
+  const voiceTimeoutRef = useRef(null);
 
   const expireCopiedContent = () => {
     setCopiedQuery(null);
@@ -36,6 +42,88 @@ export default function App() {
   const scheduleResultExpiry = () => {
     clearTimeout(copyTimeoutRef.current);
     copyTimeoutRef.current = setTimeout(expireCopiedContent, RESULT_RETIRE_MS);
+  };
+
+  // ── Dismiss voice panel ──────────────────────────────────────
+  const dismissVoice = useCallback(() => {
+    clearTimeout(voiceTimeoutRef.current);
+    setVoiceActive(false);
+    setState("idle");
+  }, []);
+
+  // ── Execute recognized commands ──────────────────────────────
+  const executeCommand = useCallback(
+    (cmd) => {
+      if (!cmd) return;
+
+      switch (cmd.action) {
+        case "play":
+        case "pause":
+        case "toggle":
+          window.notchAPI?.mediaControl("toggle");
+          break;
+        case "next":
+          window.notchAPI?.mediaControl("next");
+          break;
+        case "prev":
+          window.notchAPI?.mediaControl("prev");
+          break;
+        case "search":
+          if (cmd.query) window.notchAPI?.searchWeb(cmd.query);
+          break;
+        default:
+          break;
+      }
+
+      // Keep feedback visible for 3 seconds, then dismiss
+      clearTimeout(voiceTimeoutRef.current);
+      voiceTimeoutRef.current = setTimeout(dismissVoice, VOICE_DISMISS_MS);
+    },
+    [dismissVoice],
+  );
+
+  // ── Voice command hook with Gemini ───────────────────────────
+  const {
+    isListening,
+    isAnalyzing,
+    transcript,
+    command: voiceCommand,
+    error: voiceError,
+    startListening,
+    stopListening,
+    resetVoiceState,
+  } = useVoiceCommand({ onCommandRecognized: executeCommand });
+
+  // ── Sync orb state with voice activity ───────────────────────
+  useEffect(() => {
+    if (isListening) {
+      setState("listening");
+    } else if (isAnalyzing) {
+      setState("thinking");
+    } else if (voiceActive && voiceCommand) {
+      setState("speaking");
+    } else if (voiceActive && voiceError) {
+      setState("error");
+    }
+  }, [isListening, isAnalyzing, voiceActive, voiceCommand, voiceError]);
+
+  // ── Orb click → start/stop voice recording ───────────────────
+  const handleOrbClick = () => {
+    if (voiceActive) {
+      if (isListening) {
+        stopListening();
+        return;
+      }
+      resetVoiceState();
+      dismissVoice();
+      return;
+    }
+
+    // Clear any previous clipboard state
+    expireCopiedContent();
+
+    setVoiceActive(true);
+    startListening();
   };
 
   // Listen for dock direction (expands right or left depending on screen edge)
@@ -57,6 +145,11 @@ export default function App() {
         const isImage = kind === "image";
 
         if (isValidText || isImage) {
+          if (voiceActive) {
+            resetVoiceState();
+            dismissVoice();
+          }
+
           setCopiedQuery(isValidText ? text.trim() : null);
           setClipboardKind(kind);
           setAiResult(null);
@@ -72,7 +165,7 @@ export default function App() {
       cleanup?.();
       clearTimeout(copyTimeoutRef.current);
     };
-  }, []);
+  }, [voiceActive, dismissVoice, resetVoiceState]);
 
   useEffect(() => {
     if (!window.notchAPI?.onAiResult) return;
@@ -117,7 +210,12 @@ export default function App() {
     hoverTimeoutRef.current = setTimeout(() => {
       setIsHovered(false);
     }, 450);
-    if (!copiedQuery && clipboardKind !== "image" && !isSearchOpen) {
+    if (
+      !copiedQuery &&
+      clipboardKind !== "image" &&
+      !isSearchOpen &&
+      !voiceActive
+    ) {
       window.notchAPI?.setInteractive(false);
     }
   };
@@ -138,12 +236,24 @@ export default function App() {
     window.notchAPI?.setInteractive(false);
   };
 
+  const handleVoicePointerEnter = () => {
+    clearTimeout(voiceTimeoutRef.current);
+    window.notchAPI?.setInteractive(true);
+  };
+
+  const handleVoicePointerLeave = () => {
+    if (!isListening && !isAnalyzing && (voiceCommand || voiceError)) {
+      voiceTimeoutRef.current = setTimeout(dismissVoice, VOICE_DISMISS_MS);
+    }
+    window.notchAPI?.setInteractive(false);
+  };
+
   // Reveal the search prompt from a recent copy only after the orb is hovered.
   const hasPendingClipboard = Boolean(copiedQuery || clipboardKind === "image");
   const showMedia = Boolean(
-    !hasPendingClipboard && media && media.active && isHovered,
+    !hasPendingClipboard && !voiceActive && media && media.active && isHovered,
   );
-  const isExpanded = Boolean(isSearchOpen || showMedia);
+  const isExpanded = Boolean(isSearchOpen || showMedia || voiceActive);
 
   // Dynamically manage window dimensions based on expansion state
   useEffect(() => {
@@ -169,6 +279,10 @@ export default function App() {
     setState("idle");
   };
 
+  useEffect(() => {
+    return () => clearTimeout(voiceTimeoutRef.current);
+  }, []);
+
   return (
     <main
       className={`${isExpanded ? "expanded" : "compact"} ${
@@ -179,12 +293,28 @@ export default function App() {
         <AIOrb
           state={state}
           size={50}
+          onClick={handleOrbClick}
           onPointerEnter={handlePointerEnter}
           onPointerLeave={handlePointerLeave}
         />
       </div>
 
-      {isSearchOpen && (clipboardKind === "image" || copiedQuery) ? (
+      {voiceActive ? (
+        <VoiceResult
+          isListening={isListening}
+          isAnalyzing={isAnalyzing}
+          transcript={transcript}
+          command={voiceCommand}
+          error={voiceError}
+          onStopListening={stopListening}
+          onDismiss={() => {
+            resetVoiceState();
+            dismissVoice();
+          }}
+          onPointerEnter={handleVoicePointerEnter}
+          onPointerLeave={handleVoicePointerLeave}
+        />
+      ) : isSearchOpen && (clipboardKind === "image" || copiedQuery) ? (
         <AIResult
           loading={aiLoading}
           kind={clipboardKind}
