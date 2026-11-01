@@ -6,6 +6,7 @@ export default function AIOrb({
   amplitude = 0,
   size = 80,
   onClick,
+  onContextMenu,
   onPointerEnter,
   onPointerLeave,
 }) {
@@ -77,6 +78,10 @@ export default function AIOrb({
         "--amp": amplitude,
       }}
       onClick={handleClick}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onContextMenu?.(e);
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           onClick?.(e);

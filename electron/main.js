@@ -1,319 +1,199 @@
-import {
-  app,
-  BrowserWindow,
-  clipboard,
-  ipcMain,
-  screen,
-  session,
-  shell,
-} from "electron";
-import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { app, Menu, session } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createWindow } from "./window.js";
-import { applyPosition } from "./position.js";
-import { analyzeAudio, analyzeImage, analyzeText } from "./aiProvider.js";
+import log from "./logger.js";
+import {
+  analyzeImage,
+  analyzeText,
+  configureAi,
+  toAiError,
+} from "./aiProvider.js";
+import { createClipboardWatcher } from "./clipboardWatcher.js";
+import { registerIpcHandlers } from "./ipc.js";
+import { createMediaWatcher } from "./mediaWatcher.js";
+import { createPlacement } from "./placement.js";
+import { getApiKey, getSetting, setSetting } from "./settings.js";
+import { buildAppMenu, createTray } from "./tray.js";
+import {
+  createWindow,
+  hardenWebContents,
+  isTrustedRendererUrl,
+} from "./window.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const electronDataPath = path.join(__dirname, "../.electron-data");
-app.setPath("userData", electronDataPath);
-app.setPath("cache", path.join(electronDataPath, "Cache"));
-app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
 
-let mainWindow;
-let lastClipboardSignature = "";
-let clipboardInterval = null;
-let mediaProcess = null;
+// PowerShell can't read files inside app.asar, so the script ships unpacked.
+const MEDIA_SCRIPT = path
+  .join(__dirname, "mediaWatcher.ps1")
+  .replace(/app\.asar([\\/])/, "app.asar.unpacked$1");
 
-function readClipboardSnapshot() {
-  const formats = clipboard.availableFormats("clipboard");
-  const hasImage = formats.some((format) =>
-    format.toLowerCase().startsWith("image/"),
-  );
-
-  if (hasImage) {
-    const image = clipboard.readImage("clipboard");
-    if (!image.isEmpty()) {
-      const size = image.getSize();
-      const resizedImage =
-        size.width > 1280 ? image.resize({ width: 1280 }) : image;
-      const imageData = resizedImage.toPNG();
-
-      return {
-        kind: "image",
-        imageData: imageData.toString("base64"),
-        signature: `image:${createHash("sha1").update(imageData).digest("hex")}`,
-      };
-    }
-  }
-
-  const text = clipboard.readText() || "";
-  const trimmed = text.trim();
-
-  if (trimmed) {
-    return {
-      kind: "text",
-      text: trimmed,
-      signature: `text:${trimmed}`,
-    };
-  }
-
-  const image = clipboard.readImage("clipboard");
-  if (image.isEmpty()) return null;
-
-  const size = image.getSize();
-  const resizedImage =
-    size.width > 1280 ? image.resize({ width: 1280 }) : image;
-  const imageData = resizedImage.toPNG();
-
-  return {
-    kind: "image",
-    imageData: imageData.toString("base64"),
-    signature: `image:${createHash("sha1").update(imageData).digest("hex")}`,
-  };
+if (!app.isPackaged) {
+  // Keep development data out of the real user profile.
+  const devDataPath = path.join(__dirname, "../.electron-data");
+  app.setPath("userData", devDataPath);
+  app.setPath("cache", path.join(devDataPath, "Cache"));
+  app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
 }
 
-async function processClipboardWithAi(win, snapshot) {
+app.setAppUserModelId("com.notch.app");
+
+let mainWindow = null;
+let placement = null;
+let tray = null;
+let clipboardRequest = null;
+
+function send(channel, payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, payload);
+  }
+}
+
+async function analyzeClipboard(snapshot) {
+  // A newer copy supersedes any analysis still in flight.
+  clipboardRequest?.abort();
+  const controller = new AbortController();
+  clipboardRequest = controller;
+  const options = { signal: controller.signal };
+
   try {
     const result =
       snapshot.kind === "text"
-        ? await analyzeText(snapshot.text)
-        : await analyzeImage(snapshot.imageData);
-
-    if (win && !win.isDestroyed()) {
-      win.webContents.send("notch:ai-result", {
-        kind: snapshot.kind,
-        ...(!result ? { error: "Gemini is not configured" } : {}),
-        ...result,
-      });
+        ? await analyzeText(snapshot.text, options)
+        : await analyzeImage(snapshot.imageData, "image/png", options);
+    if (!controller.signal.aborted) {
+      send("notch:ai-result", { kind: snapshot.kind, ...result });
     }
   } catch (err) {
-    console.error("Gemini clipboard processing error:", err);
-    if (win && !win.isDestroyed()) {
-      win.webContents.send("notch:ai-result", {
-        kind: snapshot.kind,
-        error: "AI processing failed",
-      });
+    if (controller.signal.aborted) return;
+    const aiError = toAiError(err);
+    if (aiError.code !== "not-configured") {
+      log.warn(`Clipboard analysis failed (${aiError.code}):`, err.message);
     }
+    send("notch:ai-result", {
+      kind: snapshot.kind,
+      error: aiError.message,
+      code: aiError.code,
+    });
+  } finally {
+    if (clipboardRequest === controller) clipboardRequest = null;
   }
 }
 
-function startClipboardWatcher(win) {
-  if (clipboardInterval) {
-    clearInterval(clipboardInterval);
+const clipboardWatcher = createClipboardWatcher({
+  onCopy(snapshot) {
+    send("notch:clipboard-copy", {
+      kind: snapshot.kind,
+      ...(snapshot.kind === "text" ? { text: snapshot.text } : {}),
+    });
+    analyzeClipboard(snapshot);
+  },
+});
+
+const mediaWatcher = createMediaWatcher({
+  scriptPath: MEDIA_SCRIPT,
+  onUpdate: (media) => send("notch:media-update", media),
+});
+
+function setClipboardAiEnabled(enabled) {
+  setSetting("clipboardAi", enabled);
+  if (enabled) {
+    clipboardWatcher.start();
+  } else {
+    clipboardWatcher.stop();
+    clipboardRequest?.abort();
   }
-
-  try {
-    lastClipboardSignature = readClipboardSnapshot()?.signature || "";
-  } catch {
-    lastClipboardSignature = "";
-  }
-
-  clipboardInterval = setInterval(() => {
-    if (!win || win.isDestroyed()) return;
-
-    try {
-      const snapshot = readClipboardSnapshot();
-      if (!snapshot || snapshot.signature === lastClipboardSignature) return;
-
-      lastClipboardSignature = snapshot.signature;
-
-      if (
-        snapshot.kind === "image" ||
-        (snapshot.text.length >= 1 && snapshot.text.length <= 1200)
-      ) {
-        win.webContents.send("notch:clipboard-copy", {
-          kind: snapshot.kind,
-          ...(snapshot.kind === "text" ? { text: snapshot.text } : {}),
-        });
-        processClipboardWithAi(win, snapshot);
-      }
-    } catch (err) {
-      console.error("Clipboard watch error:", err);
-    }
-  }, 500);
 }
 
-function startMediaWatcher(win) {
-  if (mediaProcess) {
-    try {
-      mediaProcess.kill();
-    } catch {}
-  }
-
-  const scriptPath = path.join(__dirname, "mediaWatcher.ps1");
-  mediaProcess = spawn("powershell.exe", [
-    "-NoProfile",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-File",
-    scriptPath,
-  ]);
-
-  let buffer = "";
-  mediaProcess.stdout.on("data", (data) => {
-    buffer += data.toString();
-    const lines = buffer.split(/\r?\n/);
-    buffer = lines.pop() || "";
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-        try {
-          const parsed = JSON.parse(trimmed);
-          if (win && !win.isDestroyed()) {
-            win.webContents.send("notch:media-update", parsed);
-          }
-        } catch {}
-      }
-    }
-  });
-
-  mediaProcess.stderr.on("data", (data) => {
-    console.error(`Media watcher: ${data.toString().trim()}`);
-  });
-
-  mediaProcess.on("error", (err) => {
-    console.error("Media watcher error:", err);
-  });
+function openSettings() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.show();
+  mainWindow.focus();
+  send("notch:open-settings");
 }
 
-function sendMediaKey(action) {
-  const code = action === "next" ? "0xB0" : action === "prev" ? "0xB1" : "0xB3";
-  spawn("powershell.exe", [
-    "-NoProfile",
-    "-NonInteractive",
-    "-Command",
-    `Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, uint dwExtraInfo);' -Name K -Namespace Win32; [Win32.K]::keybd_event(${code}, 0, 0, 0); [Win32.K]::keybd_event(${code}, 0, 2, 0);`,
-  ]);
+const buildMenu = () =>
+  buildAppMenu({
+    openSettings,
+    isClipboardAiEnabled: () => getSetting("clipboardAi"),
+    setClipboardAiEnabled,
+    resetPosition: () => placement?.reset(),
+  });
+
+function configurePermissions() {
+  const ses = session.defaultSession;
+  // The renderer may only ever ask for the microphone.
+  ses.setPermissionRequestHandler(
+    (webContents, permission, callback, details) => {
+      const audioOnly =
+        permission === "media" &&
+        (details.mediaTypes ?? []).every((type) => type === "audio");
+      callback(audioOnly && isTrustedRendererUrl(webContents.getURL()));
+    },
+  );
+  ses.setPermissionCheckHandler(
+    (webContents, permission) =>
+      permission === "media" && isTrustedRendererUrl(webContents?.getURL()),
+  );
 }
 
 function createMainWindow() {
   mainWindow = createWindow();
-  applyPosition(mainWindow, "desktop-orb");
-  startClipboardWatcher(mainWindow);
-  startMediaWatcher(mainWindow);
-  return mainWindow;
-}
-
-ipcMain.on("notch:set-interactive", (event, interactive) => {
-  const window = BrowserWindow.fromWebContents(event.sender);
-  if (window && !window.isDestroyed()) {
-    window.setIgnoreMouseEvents(!interactive, { forward: true });
-  }
-});
-
-ipcMain.on("notch:move-window", (event, { deltaX, deltaY }) => {
-  const window = BrowserWindow.fromWebContents(event.sender);
-  if (window && !window.isDestroyed()) {
-    const [x, y] = window.getPosition();
-    window.setPosition(Math.round(x + deltaX), Math.round(y + deltaY));
-    window.setAlwaysOnTop(true, "screen-saver");
-  }
-});
-
-let expandedShiftX = 0;
-
-function resizeWindow(event, { width, height }) {
-  const window = BrowserWindow.fromWebContents(event.sender);
-  if (!window || window.isDestroyed()) return;
-
-  const [x, y] = window.getPosition();
-  const [curW] = window.getSize();
-  const targetW = Math.round(width);
-  const targetH = Math.round(height);
-
-  const [, curH] = window.getSize();
-  if (targetW === curW && targetH === curH) return;
-
-  const currentDisplay = screen.getDisplayNearestPoint({ x, y });
-  const maxRight = currentDisplay.workArea.x + currentDisplay.workArea.width;
-
-  let newX = x;
-  let dock = "left";
-
-  if (targetW > curW) {
-    // Expanding: check if expanding right exceeds monitor boundary
-    if (x + targetW > maxRight) {
-      expandedShiftX = Math.min(x - currentDisplay.workArea.x, targetW - curW);
-      newX = x - expandedShiftX;
-      dock = "right";
-    } else {
-      expandedShiftX = 0;
-      dock = "left";
-    }
-  } else {
-    // Shrinking: restore original position exactly
-    if (expandedShiftX > 0) {
-      newX = x + expandedShiftX;
-      expandedShiftX = 0;
-    }
-    dock = "left";
-  }
-
-  if (Math.round(newX) !== x) {
-    window.setPosition(Math.round(newX), y);
-  }
-  window.setSize(targetW, targetH);
-  window.webContents.send("notch:dock-direction", { dock });
-}
-
-ipcMain.on("notch:resize", resizeWindow);
-ipcMain.on("notch:set-window-size", resizeWindow);
-
-ipcMain.on("notch:search-web", (_event, query) => {
-  if (typeof query === "string" && query.trim()) {
-    const url = `https://www.google.com/search?q=${encodeURIComponent(query.trim())}`;
-    shell.openExternal(url);
-  }
-});
-
-ipcMain.on("notch:media-control", (_event, action) => {
-  sendMediaKey(action);
-});
-
-ipcMain.handle("notch:voice-command", async (_event, { audioData, mimeType }) => {
-  try {
-    const result = await analyzeAudio(audioData, mimeType);
-    return result || { error: "Gemini is not configured" };
-  } catch (err) {
-    console.error("Gemini voice processing error:", err);
-    return { error: err.message || "Voice processing failed" };
-  }
-});
-
-ipcMain.handle("notch:ping", () => "pong");
-
-app.whenReady().then(() => {
-  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
-    return permission === "media";
+  placement = createPlacement(mainWindow);
+  placement.restore();
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+    placement = null;
   });
-  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    callback(permission === "media");
+}
+
+async function start() {
+  if (!app.isPackaged) {
+    const { config } = await import("dotenv");
+    config({ quiet: true });
+  }
+
+  configureAi({ apiKey: getApiKey(), model: process.env.GEMINI_MODEL });
+  configurePermissions();
+  if (app.isPackaged) Menu.setApplicationMenu(null);
+
+  registerIpcHandlers({
+    getPlacement: () => placement,
+    mediaWatcher,
+    buildMenu,
   });
 
   createMainWindow();
+  tray = createTray(buildMenu);
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow();
-    }
+  if (getSetting("clipboardAi")) clipboardWatcher.start();
+  mediaWatcher.start();
+
+  log.info(`Notch ${app.getVersion()} started`);
+}
+
+app.on("web-contents-created", (_event, contents) =>
+  hardenWebContents(contents),
+);
+
+if (app.requestSingleInstanceLock()) {
+  app.on("second-instance", () => mainWindow?.showInactive());
+
+  app
+    .whenReady()
+    .then(start)
+    .catch((err) => {
+      log.error("Startup failed:", err);
+      app.exit(1);
+    });
+
+  app.on("before-quit", () => {
+    clipboardWatcher.stop();
+    mediaWatcher.stop();
+    clipboardRequest?.abort();
+    tray?.destroy();
   });
-});
 
-app.on("window-all-closed", () => {
-  if (clipboardInterval) {
-    clearInterval(clipboardInterval);
-  }
-  if (mediaProcess) {
-    try {
-      mediaProcess.kill();
-    } catch {}
-  }
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
-});
-
-export { createMainWindow };
+  app.on("window-all-closed", () => app.quit());
+} else {
+  app.quit();
+}

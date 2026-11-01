@@ -1,109 +1,206 @@
-import "dotenv/config";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
-const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-const requestTimeoutMs = 15000;
+const DEFAULT_MODEL = "gemini-2.5-flash";
+const REQUEST_TIMEOUT_MS = 15_000;
+const VALIDATE_TIMEOUT_MS = 10_000;
+
+let apiKey = "";
+let model = DEFAULT_MODEL;
+let client = null;
+
+export class AiError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = "AiError";
+    this.code = code;
+  }
+}
+
+export function configureAi(options) {
+  apiKey = options.apiKey?.trim() || "";
+  model = options.model?.trim() || DEFAULT_MODEL;
+  client = null;
+}
 
 function getClient() {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) return null;
-  return new GoogleGenAI({ apiKey });
+  client ??= new GoogleGenAI({ apiKey });
+  return client;
 }
 
-function parseJsonResponse(text) {
-  const cleaned = text
-    .trim()
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/, "");
+// Maps SDK and network failures onto messages a user can act on.
+export function toAiError(err) {
+  if (err instanceof AiError) return err;
 
-  return JSON.parse(cleaned);
-}
+  const status = typeof err?.status === "number" ? err.status : 0;
+  const message = String(err?.message ?? "");
 
-async function generate(contents) {
-  const client = getClient();
-  if (!client) return null;
-
-  const request = client.models.generateContent({
-    model,
-    contents,
-    config: {
-      responseMimeType: "application/json",
-    },
-  });
-
-  const timeout = new Promise((_, reject) => {
-    setTimeout(
-      () => reject(new Error("Gemini request timed out")),
-      requestTimeoutMs,
+  if (status === 400 && /api.?key/i.test(message)) {
+    return new AiError("invalid-key", "Your Gemini API key is not valid");
+  }
+  if (status === 401 || status === 403) {
+    return new AiError("invalid-key", "Gemini rejected the API key");
+  }
+  if (status === 404) {
+    return new AiError(
+      "model-unavailable",
+      `Gemini model "${model}" is not available`,
     );
-  });
-
-  const response = await Promise.race([request, timeout]);
-  return parseJsonResponse(response.text || "{}");
+  }
+  if (status === 429) {
+    return new AiError("rate-limited", "Gemini rate limit hit, try again soon");
+  }
+  if (status >= 500) {
+    return new AiError("unavailable", "Gemini is temporarily unavailable");
+  }
+  if (/fetch failed|ENOTFOUND|ECONNRESET|ECONNREFUSED|network/i.test(message)) {
+    return new AiError("network", "Couldn't reach Gemini, check your network");
+  }
+  return new AiError("unknown", "AI processing failed");
 }
 
-function normalizeAnalysis(result) {
+function withTimeout(signal, ms) {
+  const timeout = AbortSignal.timeout(ms);
   return {
-    micro: typeof result?.micro === "string" ? result.micro.trim() : "",
-    short: typeof result?.short === "string" ? result.short.trim() : "",
-    full: typeof result?.full === "string" ? result.full.trim() : "",
-    query: typeof result?.query === "string" ? result.query.trim() : "",
-    detectedText:
-      typeof result?.detectedText === "string"
-        ? result.detectedText.trim()
-        : "",
+    timeout,
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   };
 }
 
-export async function analyzeText(text) {
-  const result = await generate(`
-Analyze this copied text and respond ONLY in this JSON shape, with no markdown:
-{
-  "micro": "max 6 words, glanceable label",
-  "short": "max 15 words, one-line summary for the island",
-  "full": "2-4 sentences, detailed description",
-  "query": "one concise web search query"
+export function parseJsonResponse(text) {
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+  return JSON.parse(cleaned);
 }
 
-Preserve important names, technologies, error messages, and intent.
+async function generate(contents, responseSchema, { signal } = {}) {
+  const ai = getClient();
+  if (!ai) {
+    throw new AiError("not-configured", "Add a Gemini API key in Settings");
+  }
+
+  const { timeout, signal: abortSignal } = withTimeout(
+    signal,
+    REQUEST_TIMEOUT_MS,
+  );
+
+  try {
+    const response = await ai.models.generateContent({
+      model,
+      contents,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema,
+        abortSignal,
+      },
+    });
+    return parseJsonResponse(response.text || "{}");
+  } catch (err) {
+    if (timeout.aborted && !signal?.aborted) {
+      throw new AiError("timeout", "Gemini took too long to respond");
+    }
+    throw signal?.aborted ? err : toAiError(err);
+  }
+}
+
+// Confirms a key works before it is saved. Throws an AiError if it doesn't.
+export async function validateApiKey(key) {
+  const ai = new GoogleGenAI({ apiKey: key });
+  const { timeout, signal } = withTimeout(null, VALIDATE_TIMEOUT_MS);
+  try {
+    await ai.models.get({ model, config: { abortSignal: signal } });
+  } catch (err) {
+    if (timeout.aborted) {
+      throw new AiError("timeout", "Gemini took too long to respond");
+    }
+    throw toAiError(err);
+  }
+}
+
+const stringField = (description) => ({ type: Type.STRING, description });
+
+const ANALYSIS_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    micro: stringField("max 6 words, glanceable label"),
+    short: stringField("max 15 words, one-line summary for the island"),
+    full: stringField("2-4 sentences, detailed description"),
+    query: stringField("one concise, useful web search query"),
+    detectedText: stringField("visible text in an image, or empty string"),
+  },
+  required: ["micro", "short", "full", "query"],
+};
+
+const VOICE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    transcript: stringField("exact transcription of the spoken words"),
+    action: {
+      type: Type.STRING,
+      enum: ["play", "pause", "toggle", "next", "prev", "search", "unknown"],
+    },
+    query: stringField("search query if action is search, otherwise empty"),
+  },
+  required: ["transcript", "action", "query"],
+};
+
+const asTrimmedString = (value) =>
+  typeof value === "string" ? value.trim() : "";
+
+export function normalizeAnalysis(result) {
+  return {
+    micro: asTrimmedString(result?.micro),
+    short: asTrimmedString(result?.short),
+    full: asTrimmedString(result?.full),
+    query: asTrimmedString(result?.query),
+    detectedText: asTrimmedString(result?.detectedText),
+  };
+}
+
+export function normalizeVoice(result) {
+  const action = asTrimmedString(result?.action);
+  return {
+    transcript: asTrimmedString(result?.transcript),
+    action: VOICE_SCHEMA.properties.action.enum.includes(action)
+      ? action
+      : "unknown",
+    query: asTrimmedString(result?.query),
+  };
+}
+
+export async function analyzeText(text, options) {
+  const result = await generate(
+    `Analyze this copied text. Preserve important names, technologies, error messages, and intent. Leave detectedText empty.
 
 Copied text:
-${text}
-`);
-
+${text}`,
+    ANALYSIS_SCHEMA,
+    options,
+  );
   return normalizeAnalysis(result);
 }
 
-export async function analyzeImage(imageData, mimeType = "image/png") {
-  const result = await generate([
-    {
-      text: 'Analyze this image and respond ONLY in this JSON shape, with no markdown: {"micro":"max 6 words, glanceable label","short":"max 15 words, one-line summary for the island","full":"2-4 sentences, detailed description","query":"one useful web search query","detectedText":"visible text, or empty string"}.',
-    },
-    {
-      inlineData: {
-        mimeType,
-        data: imageData,
-      },
-    },
-  ]);
-
+export async function analyzeImage(imageData, mimeType, options) {
+  const result = await generate(
+    [
+      { text: "Analyze this image." },
+      { inlineData: { mimeType, data: imageData } },
+    ],
+    ANALYSIS_SCHEMA,
+    options,
+  );
   return normalizeAnalysis(result);
 }
 
-export async function analyzeAudio(audioData, mimeType = "audio/webm") {
-  const result = await generate([
-    {
-      text: `You are a voice assistant for a Windows desktop utility widget.
+export async function analyzeAudio(audioData, mimeType, options) {
+  const result = await generate(
+    [
+      {
+        text: `You are a voice assistant for a Windows desktop utility widget.
 Listen carefully to the spoken voice in this audio clip.
 Transcribe what the user said and detect the command.
-
-Respond ONLY in this JSON shape with no markdown:
-{
-  "transcript": "Exact transcription of spoken words",
-  "action": "play" | "pause" | "toggle" | "next" | "prev" | "search" | "unknown",
-  "query": "search query string if action is search, otherwise empty string"
-}
 
 Command recognition rules:
 - "play", "resume", "start music", "unpause" -> "play"
@@ -114,19 +211,11 @@ Command recognition rules:
 - "search for [x]", "google [x]", "find [x]", "look up [x]" -> "search", query: "[x]"
 - If the user asks a question or names a topic without media keywords (e.g. "what is quantum computing", "cats"), set action "search", query to that text.
 - If completely unintelligible or silent, set action "unknown" and transcript ""`,
-    },
-    {
-      inlineData: {
-        mimeType,
-        data: audioData,
       },
-    },
-  ]);
-
-  return {
-    transcript: typeof result?.transcript === "string" ? result.transcript.trim() : "",
-    action: typeof result?.action === "string" ? result.action.trim() : "unknown",
-    query: typeof result?.query === "string" ? result.query.trim() : "",
-  };
+      { inlineData: { mimeType, data: audioData } },
+    ],
+    VOICE_SCHEMA,
+    options,
+  );
+  return normalizeVoice(result);
 }
-

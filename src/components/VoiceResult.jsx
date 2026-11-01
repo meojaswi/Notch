@@ -70,9 +70,7 @@ export default function VoiceResult({
             {error}
           </span>
         ) : transcript ? (
-          <span className="voice-transcript">
-            "{transcript}"
-          </span>
+          <span className="voice-transcript">"{transcript}"</span>
         ) : isListening ? (
           <>
             <span className="voice-transcript interim">

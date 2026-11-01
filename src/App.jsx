@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import AIOrb from "./components/AIOrb";
 import AIResult from "./components/AIResult";
 import MediaIsland from "./components/MediaIsland";
+import SettingsModal from "./components/SettingsModal";
 import VoiceResult from "./components/VoiceResult";
 import useVoiceCommand from "./hooks/useVoiceCommand";
 
@@ -20,10 +21,16 @@ export default function App() {
   const [isHovered, setIsHovered] = useState(false);
   const [dockDirection, setDockDirection] = useState("left");
   const [voiceActive, setVoiceActive] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const hoverTimeoutRef = useRef(null);
   const copyTimeoutRef = useRef(null);
   const voiceTimeoutRef = useRef(null);
+  // Read by long-lived IPC listeners without re-subscribing them.
+  const voiceActiveRef = useRef(voiceActive);
+  useEffect(() => {
+    voiceActiveRef.current = voiceActive;
+  }, [voiceActive]);
 
   const expireCopiedContent = () => {
     setCopiedQuery(null);
@@ -60,13 +67,9 @@ export default function App() {
         case "play":
         case "pause":
         case "toggle":
-          window.notchAPI?.mediaControl("toggle");
-          break;
         case "next":
-          window.notchAPI?.mediaControl("next");
-          break;
         case "prev":
-          window.notchAPI?.mediaControl("prev");
+          window.notchAPI?.mediaControl(cmd.action);
           break;
         case "search":
           if (cmd.query) window.notchAPI?.searchWeb(cmd.query);
@@ -109,6 +112,11 @@ export default function App() {
 
   // ── Orb click → start/stop voice recording ───────────────────
   const handleOrbClick = () => {
+    if (settingsOpen) {
+      setSettingsOpen(false);
+      return;
+    }
+
     if (voiceActive) {
       if (isListening) {
         stopListening();
@@ -145,7 +153,7 @@ export default function App() {
         const isImage = kind === "image";
 
         if (isValidText || isImage) {
-          if (voiceActive) {
+          if (voiceActiveRef.current) {
             resetVoiceState();
             dismissVoice();
           }
@@ -165,7 +173,23 @@ export default function App() {
       cleanup?.();
       clearTimeout(copyTimeoutRef.current);
     };
-  }, [voiceActive, dismissVoice, resetVoiceState]);
+  }, [dismissVoice, resetVoiceState]);
+
+  // Settings is opened from the tray or the orb's context menu.
+  useEffect(() => {
+    if (!window.notchAPI?.onOpenSettings) return;
+    return window.notchAPI.onOpenSettings(() => {
+      resetVoiceState();
+      dismissVoice();
+      expireCopiedContent();
+      setSettingsOpen(true);
+    });
+  }, [dismissVoice, resetVoiceState]);
+
+  const closeSettings = useCallback(() => {
+    setSettingsOpen(false);
+    window.notchAPI?.setInteractive(false);
+  }, []);
 
   useEffect(() => {
     if (!window.notchAPI?.onAiResult) return;
@@ -253,7 +277,9 @@ export default function App() {
   const showMedia = Boolean(
     !hasPendingClipboard && !voiceActive && media && media.active && isHovered,
   );
-  const isExpanded = Boolean(isSearchOpen || showMedia || voiceActive);
+  const isExpanded = Boolean(
+    settingsOpen || isSearchOpen || showMedia || voiceActive,
+  );
 
   // Dynamically manage window dimensions based on expansion state
   useEffect(() => {
@@ -294,12 +320,19 @@ export default function App() {
           state={state}
           size={50}
           onClick={handleOrbClick}
+          onContextMenu={() => window.notchAPI?.showContextMenu()}
           onPointerEnter={handlePointerEnter}
           onPointerLeave={handlePointerLeave}
         />
       </div>
 
-      {voiceActive ? (
+      {settingsOpen ? (
+        <SettingsModal
+          onClose={closeSettings}
+          onPointerEnter={() => window.notchAPI?.setInteractive(true)}
+          onPointerLeave={() => window.notchAPI?.setInteractive(false)}
+        />
+      ) : voiceActive ? (
         <VoiceResult
           isListening={isListening}
           isAnalyzing={isAnalyzing}
@@ -321,12 +354,16 @@ export default function App() {
           micro={aiResult?.micro}
           short={aiResult?.short}
           full={aiResult?.full}
-          description={aiResult?.description}
           detectedText={aiResult?.detectedText}
           query={aiResult?.query}
           error={aiResult?.error}
+          errorCode={aiResult?.code}
           fallbackText={copiedQuery}
           onSearch={() => handleSearch(aiResult?.query || copiedQuery)}
+          onOpenSettings={() => {
+            dismissPrompt();
+            setSettingsOpen(true);
+          }}
           onDismiss={dismissPrompt}
           onPointerEnter={handleResultPointerEnter}
           onPointerLeave={handleResultPointerLeave}

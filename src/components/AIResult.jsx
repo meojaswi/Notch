@@ -9,14 +9,19 @@ export default function AIResult({
   detectedText,
   query,
   error,
+  errorCode,
   fallbackText,
   onSearch,
+  onOpenSettings,
   onDismiss,
   onPointerEnter,
   onPointerLeave,
   onPointerMove,
   onWheel,
 }) {
+  const needsKey =
+    errorCode === "not-configured" || errorCode === "invalid-key";
+
   return (
     <div
       className="ai-result-wrap"
@@ -51,7 +56,15 @@ export default function AIResult({
       </div>
 
       <div className="ai-result-actions">
-        {!loading && query ? (
+        {!loading && needsKey ? (
+          <button
+            type="button"
+            className="ai-search-btn"
+            onClick={onOpenSettings}
+          >
+            Settings
+          </button>
+        ) : !loading && query ? (
           <button type="button" className="ai-search-btn" onClick={onSearch}>
             Search
           </button>

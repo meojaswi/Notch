@@ -1,16 +1,34 @@
 appId: com.notch.app
 productName: Notch
 directories:
-  output: dist
+  # Separate from Vite's dist/ so builds never package previous builds.
+  output: release
+  buildResources: build
 files:
-  - "dist/**/*"
-  - "electron/**/*"
-  - "src/**/*"
-  - "package.json"
+  - dist/**/*
+  - electron/**/*
+  - "!electron/**/*.test.js"
+  - package.json
+# PowerShell can't read scripts from inside app.asar.
+asarUnpack:
+  - electron/*.ps1
+npmRebuild: false
 win:
   target:
-    - nsis
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.png
   artifactName: "Notch-${version}-setup.${ext}"
 nsis:
   oneClick: false
+  perMachine: false
   allowToChangeInstallationDirectory: true
+  createStartMenuShortcut: true
+  shortcutName: Notch
+  runAfterFinish: true
+publish:
+  provider: github
+  owner: meojaswi
+  repo: Notch
+  releaseType: draft

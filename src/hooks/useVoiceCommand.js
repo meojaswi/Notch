@@ -53,7 +53,9 @@ export default function useVoiceCommand({ onCommandRecognized } = {}) {
     ) {
       try {
         mediaRecorderRef.current.stop();
-      } catch {}
+      } catch {
+        // Already stopping; nothing to do.
+      }
     }
   }, []);
 

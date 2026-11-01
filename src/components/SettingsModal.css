@@ -103,7 +103,9 @@
   font-size: 12px;
   font-family: monospace;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .settings-input:focus {
@@ -128,9 +130,20 @@
   flex-shrink: 0;
 }
 
-.settings-save-btn:hover {
+.settings-save-btn:hover:not(:disabled) {
   background: #1d4ed8;
   box-shadow: 0 0 12px rgba(37, 99, 235, 0.5);
+}
+
+.settings-save-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.settings-error {
+  color: #ff7b7b;
+  font-size: 11px;
+  margin: 0;
 }
 
 .settings-footer {
@@ -153,6 +166,20 @@
 .settings-link:hover {
   text-decoration: underline;
   color: #9cbfff;
+}
+
+.settings-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-remove {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.settings-remove:hover {
+  color: #ff7b7b;
 }
 
 .settings-status-badge {
