@@ -30,3 +30,7 @@ Thumbs.db
 
 # Local, not part of the app
 WEBGL_STUDY_GUIDE.md
+
+# Tests are kept locally only
+*.test.js
+*.test.jsx
